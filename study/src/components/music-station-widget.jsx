@@ -21,7 +21,7 @@ import {
   Heart,
   ArrowLeft,
 } from "lucide-react"
-import { useMusic } from "@/contexts/music-context"
+import { useMusic } from "../context/music-context"
 
 export default function MusicStationWidget({ focusMusic = true }) {
   const {

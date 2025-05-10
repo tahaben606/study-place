@@ -1,16 +1,11 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import Home from './Home.jsx';
-import VideoStation from './components/VideoStation';
-
+import React from 'react';
+import Home from './app/page';
+import './app/global.css';
+import './App.css';
 
 function App() {
   return (
-    <Router>
-      <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/search" element={<VideoStation />} />
-      </Routes>
-    </Router>
+    <Home />
   );
 }
 
