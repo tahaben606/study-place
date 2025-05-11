@@ -259,41 +259,49 @@ export default function MusicStation({ focusMusic = false }) {
     setShowAddToPlaylistDropdown((prev) => !prev)
   }
 
-  const addToPlaylist = (playlistId) => {
-    if (!track) return
+  const handleAddToPlaylist = (track) => {
+    setTrackToAdd(track)
+    setShowPlaylistDropdown(true)
+  }
 
-    // Find the target playlist
+  const confirmAddToPlaylist = (playlistId) => {
+    if (!trackToAdd) return
     const targetPlaylist = playlists.find((p) => p.id === playlistId)
     if (!targetPlaylist) return
 
-    // Check if track is already in the target playlist
-    const exists = targetPlaylist.tracks.some((item) => item.name === track.name && item.artist === track.artist)
+    // Check if track already exists in playlist
+    const exists = targetPlaylist.tracks.some((item) => item.youtubeId === trackToAdd.youtubeId)
 
     if (!exists) {
-      const newTrack = {
-        ...track,
-        youtubeId,
-      }
-
-      // Add to the selected playlist
       const updatedPlaylists = playlists.map((playlist) => {
         if (playlist.id === playlistId) {
           return {
             ...playlist,
-            tracks: [...playlist.tracks, newTrack],
+            tracks: [...playlist.tracks, {
+              name: trackToAdd.name,
+              artist: trackToAdd.artist,
+              image: trackToAdd.image,
+              youtubeId: trackToAdd.youtubeId
+            }],
           }
         }
         return playlist
       })
 
       setPlaylists(updatedPlaylists)
+      // Save to localStorage immediately
+      try {
+        localStorage.setItem("studyMusicPlaylists", JSON.stringify(updatedPlaylists))
+      } catch (error) {
+        console.error("Error saving playlists to localStorage:", error)
+      }
+
       alert(`Added to "${targetPlaylist.name}"!`)
     } else {
       alert(`This track is already in "${targetPlaylist.name}"!`)
     }
-
-    // Close the dropdown
-    setShowAddToPlaylistDropdown(false)
+    setShowPlaylistDropdown(false)
+    setTrackToAdd(null)
   }
 
   const removeFromPlaylist = (index, playlistId = activePlaylistId) => {
@@ -361,14 +369,23 @@ export default function MusicStation({ focusMusic = false }) {
     }
 
     const newId = `playlist-${Date.now()}`
-    setPlaylists([
+    const updatedPlaylists = [
       ...playlists,
       {
         id: newId,
         name: newPlaylistName,
         tracks: [],
       },
-    ])
+    ]
+
+    setPlaylists(updatedPlaylists)
+    // Save to localStorage immediately
+    try {
+      localStorage.setItem("studyMusicPlaylists", JSON.stringify(updatedPlaylists))
+    } catch (error) {
+      console.error("Error saving playlists to localStorage:", error)
+    }
+
     setNewPlaylistName("")
   }
 
@@ -391,6 +408,13 @@ export default function MusicStation({ focusMusic = false }) {
     })
 
     setPlaylists(updatedPlaylists)
+    // Save to localStorage immediately
+    try {
+      localStorage.setItem("studyMusicPlaylists", JSON.stringify(updatedPlaylists))
+    } catch (error) {
+      console.error("Error saving playlists to localStorage:", error)
+    }
+
     setEditingPlaylistId(null)
     setEditingPlaylistName("")
   }
@@ -553,36 +577,6 @@ export default function MusicStation({ focusMusic = false }) {
     return `${m}:${s}`
   }
 
-  // Function to handle add to playlist from any track
-  const handleAddToPlaylist = (track) => {
-    setTrackToAdd(track)
-    setShowPlaylistDropdown(true)
-  }
-
-  const confirmAddToPlaylist = (playlistId) => {
-    if (!trackToAdd) return
-    const targetPlaylist = playlists.find((p) => p.id === playlistId)
-    if (!targetPlaylist) return
-    const exists = targetPlaylist.tracks.some((item) => item.youtubeId === trackToAdd.youtubeId)
-    if (!exists) {
-      const updatedPlaylists = playlists.map((playlist) => {
-        if (playlist.id === playlistId) {
-          return {
-            ...playlist,
-            tracks: [...playlist.tracks, trackToAdd],
-          }
-        }
-        return playlist
-      })
-      setPlaylists(updatedPlaylists)
-      alert(`Added to "${targetPlaylist.name}"!`)
-    } else {
-      alert(`This track is already in "${targetPlaylist.name}"!`)
-    }
-    setShowPlaylistDropdown(false)
-    setTrackToAdd(null)
-  }
-
   return (
     <div className="bg-zinc-900 text-white rounded-xl shadow-2xl overflow-hidden h-full flex flex-col">
       <div className="p-6 flex-1 overflow-hidden flex flex-col">
@@ -608,8 +602,8 @@ export default function MusicStation({ focusMusic = false }) {
                 key={playlist.category}
                 onClick={() => searchStudyMusic(playlist)}
                 className={`p-3 rounded-lg text-left transition-colors ${musicCategory === playlist.category
-                    ? "bg-green-600 text-white"
-                    : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
+                  ? "bg-green-600 text-white"
+                  : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
                   }`}
               >
                 <div className="flex items-center gap-2">
@@ -764,8 +758,8 @@ export default function MusicStation({ focusMusic = false }) {
                       <li
                         key={index}
                         className={`flex items-center bg-zinc-800 rounded-lg p-2 cursor-pointer hover:bg-zinc-700 transition-colors ${currentTrackIndex === index && activePlaylistId === activePlaylist.id
-                            ? "border-l-4 border-green-500"
-                            : ""
+                          ? "border-l-4 border-green-500"
+                          : ""
                           }`}
                         onClick={() => playTrackFromPlaylist(index)}
                       >
@@ -936,7 +930,7 @@ export default function MusicStation({ focusMusic = false }) {
                               {playlists.map((playlist) => (
                                 <li
                                   key={playlist.id}
-                                  onClick={() => addToPlaylist(playlist.id)}
+                                  onClick={() => confirmAddToPlaylist(playlist.id)}
                                   className="px-3 py-2 hover:bg-zinc-700 cursor-pointer flex items-center justify-between"
                                 >
                                   <span className="text-sm">{playlist.name}</span>

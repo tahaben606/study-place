@@ -22,6 +22,7 @@ import {
   ArrowLeft,
 } from "lucide-react"
 import { useMusic } from "../context/music-context"
+import YouTube from "react-youtube"
 
 export default function MusicStationWidget({ focusMusic = true }) {
   const {
@@ -238,33 +239,51 @@ export default function MusicStationWidget({ focusMusic = true }) {
     setShowSearch(false)
   }
 
-  const addToPlaylist = (track) => {
-    if (!activePlaylist) return
+  const [showPlaylistDropdown, setShowPlaylistDropdown] = useState(false)
+  const [trackToAdd, setTrackToAdd] = useState(null)
 
-    // Check if track is already in the playlist
-    const exists = activePlaylist.tracks.some((t) => t.youtubeId === track.id)
+  const handleAddToPlaylist = (track) => {
+    setTrackToAdd(track)
+    setShowPlaylistDropdown(true)
+  }
+
+  const confirmAddToPlaylist = (playlistId) => {
+    if (!trackToAdd) return
+    const targetPlaylist = playlists.find((p) => p.id === playlistId)
+    if (!targetPlaylist) return
+
+    // Check if track already exists in playlist
+    const exists = targetPlaylist.tracks.some((item) => item.youtubeId === trackToAdd.youtubeId)
 
     if (!exists) {
-      const updatedPlaylists = playlists.map((p) => {
-        if (p.id === activePlaylistId) {
+      const updatedPlaylists = playlists.map((playlist) => {
+        if (playlist.id === playlistId) {
           return {
-            ...p,
-            tracks: [
-              ...p.tracks,
-              {
-                name: track.name,
-                artist: track.artist,
-                image: track.image,
-                youtubeId: track.id,
-              },
-            ],
+            ...playlist,
+            tracks: [...playlist.tracks, {
+              name: trackToAdd.name,
+              artist: trackToAdd.artist,
+              image: trackToAdd.image,
+              youtubeId: trackToAdd.youtubeId
+            }],
           }
         }
-        return p
+        return playlist
       })
 
       setPlaylists(updatedPlaylists)
+      // Save to localStorage immediately
+      try {
+        localStorage.setItem("studyMusicPlaylists", JSON.stringify(updatedPlaylists))
+      } catch (error) {
+        console.error("Error saving playlists to localStorage:", error)
+      }
+      alert(`Added to "${targetPlaylist.name}"!`)
+    } else {
+      alert(`This track is already in "${targetPlaylist.name}"!`)
     }
+    setShowPlaylistDropdown(false)
+    setTrackToAdd(null)
   }
 
   const createNewPlaylist = () => {
@@ -294,9 +313,37 @@ export default function MusicStationWidget({ focusMusic = true }) {
     })
 
     setPlaylists(updatedPlaylists)
+    // Save to localStorage immediately
+    try {
+      localStorage.setItem("studyMusicPlaylists", JSON.stringify(updatedPlaylists))
+    } catch (error) {
+      console.error("Error saving playlists to localStorage:", error)
+    }
   }
 
-  const playTrackFromPlaylist = (trackData) => {
+  const [currentTrackIndex, setCurrentTrackIndex] = useState(-1)
+
+  const handleNext = () => {
+    if (currentTrackIndex < activePlaylist.tracks.length - 1) {
+      // Play next track in current playlist
+      playTrackFromPlaylist(currentTrackIndex + 1)
+    } else if (repeat) {
+      // If repeat is on, go to the first track of current playlist
+      playTrackFromPlaylist(0)
+    }
+  }
+
+  const onPlayerStateChange = (event) => {
+    // YouTube state 0 means the video ended
+    if (event.data === 0) {
+      handleNext()
+    }
+  }
+
+  const playTrackFromPlaylist = (index) => {
+    if (index < 0 || index >= activePlaylist.tracks.length) return
+
+    const trackData = activePlaylist.tracks[index]
     playTrack(
       {
         name: trackData.name,
@@ -306,6 +353,30 @@ export default function MusicStationWidget({ focusMusic = true }) {
       },
       trackData.youtubeId,
     )
+    setCurrentTrackIndex(index)
+    setShowPlaylists(false)
+  }
+
+  const playEntirePlaylist = (playlistId) => {
+    const playlist = playlists.find((p) => p.id === playlistId)
+    if (!playlist || playlist.tracks.length === 0) {
+      alert("This playlist is empty. Add some tracks first!")
+      return
+    }
+
+    // Play the first track
+    const firstTrack = playlist.tracks[0]
+    playTrack(
+      {
+        name: firstTrack.name,
+        artist: firstTrack.artist,
+        image: firstTrack.image,
+        youtubeId: firstTrack.youtubeId,
+      },
+      firstTrack.youtubeId,
+    )
+    setActivePlaylistId(playlistId)
+    setCurrentTrackIndex(0)
     setShowPlaylists(false)
   }
 
@@ -374,13 +445,39 @@ export default function MusicStationWidget({ focusMusic = true }) {
                       >
                         <Play size={16} />
                       </button>
-                      <button
-                        onClick={() => addToPlaylist(result)}
-                        className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-700 rounded-full"
-                        title={`Add to ${activePlaylist.name}`}
-                      >
-                        <Plus size={16} />
-                      </button>
+                      <div className="relative">
+                        <button
+                          onClick={() => handleAddToPlaylist({
+                            name: result.name,
+                            artist: result.artist,
+                            image: result.image,
+                            youtubeId: result.id
+                          })}
+                          className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-700 rounded-full"
+                          title="Add to playlist"
+                        >
+                          <Plus size={16} />
+                        </button>
+                        {showPlaylistDropdown && trackToAdd?.youtubeId === result.id && (
+                          <div className="absolute right-0 top-full mt-1 bg-zinc-800 rounded-lg shadow-xl w-48 z-10">
+                            <div className="p-2 border-b border-zinc-700 text-green-500 text-sm font-medium">
+                              Add to playlist:
+                            </div>
+                            <ul className="max-h-48 overflow-y-auto">
+                              {playlists.map((playlist) => (
+                                <li
+                                  key={playlist.id}
+                                  onClick={() => confirmAddToPlaylist(playlist.id)}
+                                  className="px-3 py-2 hover:bg-zinc-700 cursor-pointer flex items-center justify-between"
+                                >
+                                  <span className="text-sm">{playlist.name}</span>
+                                  <span className="text-xs text-zinc-500">({playlist.tracks.length})</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -462,17 +559,28 @@ export default function MusicStationWidget({ focusMusic = true }) {
                 <div className="space-y-1 max-h-[200px] overflow-y-auto pr-2">
                   {filteredPlaylists.length > 0 ? (
                     filteredPlaylists.map((playlist) => (
-                      <button
+                      <div
                         key={playlist.id}
-                        onClick={() => setActivePlaylistId(playlist.id)}
-                        className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
-                          activePlaylistId === playlist.id
-                            ? "bg-green-600/30 text-green-400"
-                            : "hover:bg-zinc-800 text-white"
-                        }`}
+                        className={`w-full flex items-center justify-between px-3 py-2 rounded-lg transition-colors ${activePlaylistId === playlist.id
+                          ? "bg-green-600/30 text-green-400"
+                          : "hover:bg-zinc-800 text-white"
+                          }`}
                       >
-                        {playlist.name} <span className="text-xs text-zinc-500">({playlist.tracks.length})</span>
-                      </button>
+                        <button
+                          onClick={() => setActivePlaylistId(playlist.id)}
+                          className="flex-1 text-left"
+                        >
+                          {playlist.name} <span className="text-xs text-zinc-500">({playlist.tracks.length})</span>
+                        </button>
+                        <button
+                          onClick={() => playEntirePlaylist(playlist.id)}
+                          disabled={playlist.tracks.length === 0}
+                          className="p-2 text-green-500 hover:text-green-400 hover:bg-zinc-700 rounded-full disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="Play entire playlist"
+                        >
+                          <Play size={16} />
+                        </button>
+                      </div>
                     ))
                   ) : (
                     <p className="text-center text-zinc-500 py-2">No playlists found</p>
@@ -499,7 +607,7 @@ export default function MusicStationWidget({ focusMusic = true }) {
                         alt={track.name}
                         className="w-12 h-12 rounded object-cover"
                       />
-                      <div className="flex-1 min-w-0 cursor-pointer" onClick={() => playTrackFromPlaylist(track)}>
+                      <div className="flex-1 min-w-0 cursor-pointer" onClick={() => playTrackFromPlaylist(index)}>
                         <h4 className="font-medium text-sm line-clamp-1">{track.name}</h4>
                         <p className="text-xs text-zinc-400 line-clamp-1">{track.artist}</p>
                       </div>
@@ -559,11 +667,10 @@ export default function MusicStationWidget({ focusMusic = true }) {
             <button
               key={playlist.category}
               onClick={() => searchStudyMusic(playlist)}
-              className={`p-2 rounded-lg text-left transition-colors ${
-                musicCategory === playlist.category
-                  ? "bg-green-600 text-white"
-                  : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
-              }`}
+              className={`p-2 rounded-lg text-left transition-colors ${musicCategory === playlist.category
+                ? "bg-green-600 text-white"
+                : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
+                }`}
             >
               <div className="flex items-center gap-2">
                 {playlist.category === "lofi" && <Coffee size={16} />}
@@ -598,6 +705,40 @@ export default function MusicStationWidget({ focusMusic = true }) {
               <div className="text-center mb-3 w-full">
                 <h2 className="text-base font-bold truncate">{track.name}</h2>
                 <p className="text-zinc-400 text-sm truncate">{track.artist}</p>
+                <div className="mt-2 flex justify-center gap-2 relative">
+                  <button
+                    onClick={() => handleAddToPlaylist({
+                      name: track.name,
+                      artist: track.artist,
+                      image: track.image,
+                      youtubeId: track.youtubeId
+                    })}
+                    className="inline-flex items-center gap-1 px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-sm rounded-lg transition-colors"
+                  >
+                    <Plus size={14} />
+                    Add to Playlist
+                  </button>
+
+                  {showPlaylistDropdown && (
+                    <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 bg-zinc-800 rounded-lg shadow-xl w-48 z-10">
+                      <div className="p-2 border-b border-zinc-700 text-green-500 text-sm font-medium">
+                        Add to playlist:
+                      </div>
+                      <ul className="max-h-48 overflow-y-auto">
+                        {playlists.map((playlist) => (
+                          <li
+                            key={playlist.id}
+                            onClick={() => confirmAddToPlaylist(playlist.id)}
+                            className="px-3 py-2 hover:bg-zinc-700 cursor-pointer flex items-center justify-between"
+                          >
+                            <span className="text-sm">{playlist.name}</span>
+                            <span className="text-xs text-zinc-500">({playlist.tracks.length})</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
